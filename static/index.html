@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>系统监控面板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            transition: 0.3s;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        #toggleDark {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            padding: 8px 16px;
+            border: none;
+            background: #1890ff;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #ffffff, #f7f7f7);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+            transition: 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+        }
+
+        .value {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        canvas {
+            width: 100% !important;
+            height: 260px !important;
+        }
+
+        /* 深色模式 */
+        .dark {
+            background: #1e1e1e;
+            color: #eee;
+        }
+
+        .dark h1 {
+            color: #eee;
+        }
+
+        .dark .card {
+            background: #2b2b2b;
+            box-shadow: 0 6px 16px rgba(255,255,255,0.1);
+        }
+
+        .dark #toggleDark {
+            background: #722ed1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            cursor: pointer;
+            background: #fafafa;
+        }
+
+        .dark th {
+            background: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="toggleDark">切换深色模式</button>
+    <h1>系统监控面板</h1>
+
+    <div class="grid">
+        <div class="card">
+            <h2>CPU 使用率</h2>
+            <div class="value" id="cpuValue">CPU：--%</div>
+            <canvas id="cpuChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h2>内存使用情况</h2>
+            <div class="value" id="memoryValue">内存：-- / --</div>
+            <canvas id="memoryChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h2>网络流量（bytes）</h2>
+            <div class="value" id="netValue">网络：发送 -- / 接收 --</div>
+            <canvas id="netChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h2>进程列表</h2>
+            <input id="search" placeholder="搜索进程..." style="width:100%;padding:8px;margin-bottom:10px;">
+            <table id="procTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">PID</th>
+                        <th onclick="sortTable(1)">名称</th>
+                        <th onclick="sortTable(2)">CPU%</th>
+                        <th onclick="sortTable(3)">内存%</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 深色模式切换
+        document.getElementById("toggleDark").onclick = () => {
+            document.body.classList.toggle("dark");
+        };
+
+        // 图表初始化
+        const cpuChart = new Chart(document.getElementById("cpuChart"), {
+            type: "line",
+            data: { labels: [], datasets: [{ label: "CPU %", data: [], borderColor: "#ff4d4f", tension: 0.3 }] },
+            options: { animation: { duration: 300, easing: "easeOutQuart" }, scales: { y: { min: 0, max: 100 } } }
+        });
+
+        const memoryChart = new Chart(document.getElementById("memoryChart"), {
+            type: "doughnut",
+            data: { labels: ["已使用", "剩余"], datasets: [{ data: [0, 0], backgroundColor: ["#ff7875", "#69c0ff"] }] },
+            options: { animation: { duration: 300 } }
+        });
+
+        const netChart = new Chart(document.getElementById("netChart"), {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [
+                    { label: "发送 bytes", data: [], borderColor: "#52c41a", tension: 0.3 },
+                    { label: "接收 bytes", data: [], borderColor: "#1890ff", tension: 0.3 }
+                ]
+            },
+            options: { animation: { duration: 300 } }
+        });
+
+        // 更新图表
+        async function updateCharts() {
+            const cpu = await fetch("/api/cpu").then(r => r.json());
+            const memory = await fetch("/api/memory").then(r => r.json());
+            const network = await fetch("/api/network").then(r => r.json());
+
+            // 数字显示
+            document.getElementById("cpuValue").innerText = `CPU：${cpu["CPU使用率"].toFixed(1)}%`;
+            document.getElementById("memoryValue").innerText =
+                `内存：${memory["占用"]} / ${memory["总计"]}`;
+            document.getElementById("netValue").innerText =
+                `网络：上传 ${network["上传"]} / 接收 ${network["接收"]}`;
+
+            // CPU 图
+            cpuChart.data.labels.push("");
+            cpuChart.data.datasets[0].data.push(cpu["CPU使用率"]);
+            if (cpuChart.data.labels.length > 30) {
+                cpuChart.data.labels.shift();
+                cpuChart.data.datasets[0].data.shift();
+            }
+            cpuChart.update();
+
+            // 内存图
+            const usedMB = parseFloat(memory["占用"].split(" ")[0]);
+            const totalMB = parseFloat(memory["总计"].split(" ")[0]);
+            memoryChart.data.datasets[0].data = [usedMB, totalMB - usedMB];
+            memoryChart.update();
+
+            // 网络图（累计值）
+            const uploadMB = parseFloat(network["上传"].split(" ")[0]);
+            const downloadMB = parseFloat(network["接收"].split(" ")[0]);
+
+            netChart.data.labels.push("");
+            netChart.data.datasets[0].data.push(uploadMB);
+            netChart.data.datasets[1].data.push(downloadMB);
+
+            if (netChart.data.labels.length > 30) {
+                netChart.data.labels.shift();
+                netChart.data.datasets[0].data.shift();
+                netChart.data.datasets[1].data.shift();
+            }
+            netChart.update();
+        }
+
+
+        // 进程列表
+        async function updateProcesses() {
+            const data = await fetch("/api/processes?limit=50").then(r => r.json());
+            const tbody = document.querySelector("#procTable tbody");
+            tbody.innerHTML = "";
+
+            data.forEach(p => {
+                const row = `<tr>
+                    <td>${p["进程ID"]}</td>
+                    <td>${p["进程名"]}</td>
+                    <td>${p["CPU使用率"]}</td>
+                    <td>${p["内存使用率"]}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // 搜索
+        document.getElementById("search").oninput = function() {
+            const keyword = this.value.toLowerCase();
+            document.querySelectorAll("#procTable tbody tr").forEach(row => {
+                row.style.display = row.innerText.toLowerCase().includes(keyword) ? "" : "none";
+            });
+        };
+
+        // 排序
+        function sortTable(col) {
+            const tbody = document.querySelector("#procTable tbody");
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+
+            rows.sort((a, b) => {
+                const A = a.children[col].innerText;
+                const B = b.children[col].innerText;
+                return isNaN(A) ? A.localeCompare(B) : A - B;
+            });
+
+            tbody.innerHTML = "";
+            rows.forEach(r => tbody.appendChild(r));
+        }
+
+        // 定时刷新
+        setInterval(updateCharts, 2000);
+        setInterval(updateProcesses, 5000);
+
+        updateCharts();
+        updateProcesses();
+    </script>
+</body>
+</html>

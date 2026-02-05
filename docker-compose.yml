@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  monitor:
+    build: .
+    container_name: system_monitor
+    ports:
+      - "1000:1000"
+    restart: always
