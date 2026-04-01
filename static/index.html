@@ -122,7 +122,7 @@
         </div>
 
         <div class="card">
-            <h2>网络流量（bytes）</h2>
+            <h2>网络流量（速率）</h2>
             <div class="value" id="netValue">网络：发送 -- / 接收 --</div>
             <canvas id="netChart"></canvas>
         </div>
@@ -168,12 +168,28 @@
             data: {
                 labels: [],
                 datasets: [
-                    { label: "发送 bytes", data: [], borderColor: "#52c41a", tension: 0.3 },
-                    { label: "接收 bytes", data: [], borderColor: "#1890ff", tension: 0.3 }
+                    { label: "发送 MB/s", data: [], borderColor: "#52c41a", tension: 0.3 },
+                    { label: "接收 MB/s", data: [], borderColor: "#1890ff", tension: 0.3 }
                 ]
             },
             options: { animation: { duration: 300 } }
         });
+
+
+        function formatBytes(bytes) {
+            const units = ["B", "KB", "MB", "GB", "TB"];
+            let value = bytes;
+            let i = 0;
+            while (value >= 1024 && i < units.length - 1) {
+                value /= 1024;
+                i++;
+            }
+            return `${value.toFixed(2)} ${units[i]}`;
+        }
+
+        function formatRate(bytesPerSec) {
+            return `${formatBytes(bytesPerSec)}/s`;
+        }
 
         // 更新图表
         async function updateCharts() {
@@ -182,15 +198,15 @@
             const network = await fetch("/api/network").then(r => r.json());
 
             // 数字显示
-            document.getElementById("cpuValue").innerText = `CPU：${cpu["CPU使用率"].toFixed(1)}%`;
+            document.getElementById("cpuValue").innerText = `CPU：${cpu.cpu_percent.toFixed(1)}%`;
             document.getElementById("memoryValue").innerText =
-                `内存：${memory["占用"]} / ${memory["总计"]}`;
+                `内存：${formatBytes(memory.used_bytes)} / ${formatBytes(memory.total_bytes)}`;
             document.getElementById("netValue").innerText =
-                `网络：上传 ${network["上传"]} / 接收 ${network["接收"]}`;
+                `网络：上传 ${formatRate(network.upload_bytes_per_sec)} / 接收 ${formatRate(network.download_bytes_per_sec)}`;
 
             // CPU 图
             cpuChart.data.labels.push("");
-            cpuChart.data.datasets[0].data.push(cpu["CPU使用率"]);
+            cpuChart.data.datasets[0].data.push(cpu.cpu_percent);
             if (cpuChart.data.labels.length > 30) {
                 cpuChart.data.labels.shift();
                 cpuChart.data.datasets[0].data.shift();
@@ -198,14 +214,14 @@
             cpuChart.update();
 
             // 内存图
-            const usedMB = parseFloat(memory["占用"].split(" ")[0]);
-            const totalMB = parseFloat(memory["总计"].split(" ")[0]);
+            const usedMB = memory.used_bytes / 1024 / 1024;
+            const totalMB = memory.total_bytes / 1024 / 1024;
             memoryChart.data.datasets[0].data = [usedMB, totalMB - usedMB];
             memoryChart.update();
 
-            // 网络图（累计值）
-            const uploadMB = parseFloat(network["上传"].split(" ")[0]);
-            const downloadMB = parseFloat(network["接收"].split(" ")[0]);
+            // 网络图（速率）
+            const uploadMB = network.upload_bytes_per_sec / 1024 / 1024;
+            const downloadMB = network.download_bytes_per_sec / 1024 / 1024;
 
             netChart.data.labels.push("");
             netChart.data.datasets[0].data.push(uploadMB);
@@ -228,10 +244,10 @@
 
             data.forEach(p => {
                 const row = `<tr>
-                    <td>${p["进程ID"]}</td>
-                    <td>${p["进程名"]}</td>
-                    <td>${p["CPU使用率"]}</td>
-                    <td>${p["内存使用率"]}</td>
+                    <td>${p.pid}</td>
+                    <td>${p.name ?? ""}</td>
+                    <td>${p.cpu_percent}</td>
+                    <td>${p.memory_percent}</td>
                 </tr>`;
                 tbody.innerHTML += row;
             });
