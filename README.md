@@ -52,7 +52,7 @@ API 路径没有改变：
 - `GET /api/memory`
 - `GET /api/disks`
 - `GET /api/network`
-- `GET /api/processes?limit=200`
+- `GET /api/processes?limit=500`
 
 为专业监控视图新增：
 
@@ -78,6 +78,10 @@ uvicorn app.app:app --reload --host 0.0.0.0 --port 1000
 访问 `http://127.0.0.1:1000`。
 
 ### Docker
+
+默认 Compose 配置面向 Linux 宿主机监控，共享宿主机的 PID、网络和 UTS
+命名空间。因此进程列表、网络吞吐和主机名来自宿主机，而不是只显示
+Uvicorn 容器进程。
 
 ```bash
 docker compose up -d --build
@@ -106,10 +110,19 @@ curl "http://127.0.0.1:1000/api/processes?limit=20"
 
 ## 部署边界
 
-默认 Docker 配置采集的是容器命名空间内的数据。因此进程列表通常只能
-看到容器进程，磁盘与主机进程也可能和宿主机不同。若目标是监控宿主机，
-需要根据安全要求显式配置 PID 命名空间和只读主机挂载；项目不会默认开启
-这些高权限配置。
+默认 Docker 配置使用 `pid: host`、`network_mode: host` 和 `uts: host`，
+仅适用于 Linux Docker Engine。它不会再通过 `ports` 映射端口，Uvicorn
+会直接在宿主机 `1000` 端口监听。
+
+共享宿主机命名空间会扩大容器的可见范围。Compose 同时启用了只读根文件
+系统、丢弃 Linux capabilities、仅恢复监听 1000 端口所需的
+`NET_BIND_SERVICE`，并启用 `no-new-privileges`。项目没有挂载宿主机根
+目录，因此不能通过 Web 服务读取主机文件；磁盘容量表示 Docker 后端所在
+文件系统，其他未挂载磁盘不会被枚举。
+
+如果只想监控容器本身，应删除 `pid`、`network_mode`、`uts` 和
+`MONITOR_HOST_MODE`，并恢复 `ports: ["1000:1000"]`。当前面板没有身份
+认证，不应直接暴露在不可信公网。
 
 Chart.js 延续原项目的 CDN 加载方式，未增加 npm 或 Python 依赖。离线环境
 如需完整图表，可将同版本 Chart.js 文件放入 `static/` 并将页面引用改为

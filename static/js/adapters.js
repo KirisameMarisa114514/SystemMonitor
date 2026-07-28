@@ -32,6 +32,7 @@ export function normalizeSystem(raw = {}) {
     uptimeSeconds: numeric(raw.uptime_seconds, raw["运行时间"]),
     pythonVersion: firstDefined(raw.python_version, raw["Python版本"]),
     environment: firstDefined(raw.environment, raw["运行环境"]),
+    monitoringScope: firstDefined(raw.monitoring_scope, raw["监控范围"]),
     processCount: numeric(raw.process_count, raw["进程数"]),
   };
 }

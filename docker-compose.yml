@@ -2,6 +2,20 @@ services:
   monitor:
     build: .
     container_name: system_monitor
-    ports:
-      - "1000:1000"
+    # Linux host-monitoring mode: psutil reads the host PID, network and UTS
+    # namespaces instead of reporting only this container's Uvicorn process.
+    network_mode: host
+    pid: host
+    uts: host
+    environment:
+      MONITOR_HOST_MODE: "1"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
     restart: always

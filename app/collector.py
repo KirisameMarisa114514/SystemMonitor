@@ -22,6 +22,15 @@ _network_lock = threading.Lock()
 _last_network_sample: tuple[float, int, int] | None = None
 
 
+def _host_mode_enabled() -> bool:
+    return os.getenv("MONITOR_HOST_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def bytes_h(value: int | float) -> str:
     """Keep the legacy API representation in MB."""
 
@@ -37,6 +46,8 @@ def _safe_number(value: Any, default: float = 0) -> float:
 
 
 def _detect_environment() -> str:
+    if _host_mode_enabled():
+        return "Host"
     if os.getenv("KUBERNETES_SERVICE_HOST"):
         return "Kubernetes"
     if Path("/.dockerenv").exists():
@@ -66,6 +77,9 @@ def get_system() -> Dict[str, Any]:
     system_name = platform.system() or "Unknown"
     system_release = platform.release() or "Unknown"
     environment = _detect_environment()
+    monitoring_scope = (
+        "host" if _host_mode_enabled() or environment == "Host" else "container"
+    )
     process_count = len(psutil.pids())
 
     return {
@@ -79,6 +93,7 @@ def get_system() -> Dict[str, Any]:
         "运行时间": uptime_seconds,
         "Python版本": platform.python_version(),
         "运行环境": environment,
+        "监控范围": "宿主机" if monitoring_scope == "host" else "容器",
         "进程数": process_count,
         "hostname": hostname,
         "os": system_name,
@@ -91,6 +106,7 @@ def get_system() -> Dict[str, Any]:
         "uptime_seconds": uptime_seconds,
         "python_version": platform.python_version(),
         "environment": environment,
+        "monitoring_scope": monitoring_scope,
         "process_count": process_count,
     }
 

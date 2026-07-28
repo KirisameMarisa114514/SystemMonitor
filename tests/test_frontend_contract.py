@@ -59,8 +59,19 @@ class FrontendContractTests(unittest.TestCase):
             "usage_percent",
             "bytes_sent_total",
             "upload_bytes_per_sec",
+            "monitoring_scope",
         ):
             self.assertIn(api_key, self.adapters_js)
+
+    def test_frontend_process_limit_matches_backend_allowance(self):
+        config_js = (PROJECT_ROOT / "static" / "js" / "config.js").read_text(
+            encoding="utf-8"
+        )
+        routes_py = (PROJECT_ROOT / "app" / "api" / "routes.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("processLimit: 500", config_js)
+        self.assertIn("le=1000", routes_py)
 
 
 if __name__ == "__main__":

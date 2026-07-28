@@ -105,10 +105,19 @@ class CollectorTests(unittest.TestCase):
             "uptime_seconds",
             "python_version",
             "environment",
+            "monitoring_scope",
             "process_count",
         }
         self.assertTrue(required.issubset(result))
         self.assertGreaterEqual(result["uptime_seconds"], 0)
+
+    def test_host_mode_is_reported_explicitly(self):
+        with patch.dict(collector.os.environ, {"MONITOR_HOST_MODE": "1"}):
+            result = collector.get_system()
+
+        self.assertEqual(result["environment"], "Host")
+        self.assertEqual(result["monitoring_scope"], "host")
+        self.assertEqual(result["监控范围"], "宿主机")
 
     def test_existing_api_paths_are_preserved(self):
         paths = {route.path for route in app.routes}

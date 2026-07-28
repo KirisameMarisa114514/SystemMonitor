@@ -19,6 +19,7 @@ class SystemInfo(ApiModel):
     uptime_seconds: float
     python_version: str
     environment: str
+    monitoring_scope: str
     process_count: int
 
 
