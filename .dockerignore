@@ -1,0 +1,8 @@
+.git
+.gitignore
+app/.venv
+**/__pycache__
+*.py[cod]
+backups
+tests
+*.log
