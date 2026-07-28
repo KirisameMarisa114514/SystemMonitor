@@ -1,40 +1,25 @@
-from fastapi import FastAPI, Query
+from pathlib import Path
+
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import collector
-from .schemas import CpuInfo, DiskInfo, MemoryInfo, NetworkInfo, ProcessInfo
-
-app = FastAPI()
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
+from .api.routes import router
 
 
-@app.get("/")
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+
+app = FastAPI(
+    title="轻量系统监控 API",
+    description="面向个人服务器、开发环境和容器应用的系统监控接口。",
+    version="2.0.0",
+)
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.include_router(router, prefix="/api")
+
+
+@app.get("/", include_in_schema=False)
 def index():
-    return FileResponse("static/index.html")
-
-
-@app.get("/api/cpu", response_model=CpuInfo)
-def cpu_info():
-    return collector.get_cpu()
-
-
-@app.get("/api/memory", response_model=MemoryInfo)
-def memory_info():
-    return collector.get_memory()
-
-
-@app.get("/api/disks", response_model=list[DiskInfo])
-def disks_info():
-    return collector.get_disks()
-
-
-@app.get("/api/network", response_model=NetworkInfo)
-def network_info():
-    return collector.get_network()
-
-
-@app.get("/api/processes", response_model=list[ProcessInfo])
-def processes_info(limit: int = Query(default=10, ge=1, le=200)):
-    return collector.get_processes(limit)
+    return FileResponse(STATIC_DIR / "index.html")

@@ -1,287 +1,341 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-    <meta charset="UTF-8">
-    <title>系统监控面板</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f0f2f5;
-            margin: 0;
-            padding: 20px;
-            transition: 0.3s;
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-        }
-
-        #toggleDark {
-            position: fixed;
-            right: 20px;
-            top: 20px;
-            padding: 8px 16px;
-            border: none;
-            background: #1890ff;
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-            gap: 20px;
-        }
-
-        .card {
-            background: linear-gradient(135deg, #ffffff, #f7f7f7);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-            transition: 0.3s;
-        }
-
-        .card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 24px rgba(0,0,0,0.25);
-        }
-
-        .value {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        canvas {
-            width: 100% !important;
-            height: 260px !important;
-        }
-
-        /* 深色模式 */
-        .dark {
-            background: #1e1e1e;
-            color: #eee;
-        }
-
-        .dark h1 {
-            color: #eee;
-        }
-
-        .dark .card {
-            background: #2b2b2b;
-            box-shadow: 0 6px 16px rgba(255,255,255,0.1);
-        }
-
-        .dark #toggleDark {
-            background: #722ed1;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-
-        th, td {
-            padding: 8px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            cursor: pointer;
-            background: #fafafa;
-        }
-
-        .dark th {
-            background: #333;
-        }
-    </style>
-</head>
-
-<body>
-    <button id="toggleDark">切换深色模式</button>
-    <h1>系统监控面板</h1>
-
-    <div class="grid">
-        <div class="card">
-            <h2>CPU 使用率</h2>
-            <div class="value" id="cpuValue">CPU：--%</div>
-            <canvas id="cpuChart"></canvas>
-        </div>
-
-        <div class="card">
-            <h2>内存使用情况</h2>
-            <div class="value" id="memoryValue">内存：-- / --</div>
-            <canvas id="memoryChart"></canvas>
-        </div>
-
-        <div class="card">
-            <h2>网络流量（速率）</h2>
-            <div class="value" id="netValue">网络：发送 -- / 接收 --</div>
-            <canvas id="netChart"></canvas>
-        </div>
-
-        <div class="card">
-            <h2>进程列表</h2>
-            <input id="search" placeholder="搜索进程..." style="width:100%;padding:8px;margin-bottom:10px;">
-            <table id="procTable">
-                <thead>
-                    <tr>
-                        <th onclick="sortTable(0)">PID</th>
-                        <th onclick="sortTable(1)">名称</th>
-                        <th onclick="sortTable(2)">CPU%</th>
-                        <th onclick="sortTable(3)">内存%</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="面向个人服务器、开发环境和容器应用的轻量级实时监控面板">
+    <meta name="api-base" content="/api">
+    <title>系统监控</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <script>
-        // 深色模式切换
-        document.getElementById("toggleDark").onclick = () => {
-            document.body.classList.toggle("dark");
-        };
-
-        // 图表初始化
-        const cpuChart = new Chart(document.getElementById("cpuChart"), {
-            type: "line",
-            data: { labels: [], datasets: [{ label: "CPU %", data: [], borderColor: "#ff4d4f", tension: 0.3 }] },
-            options: { animation: { duration: 300, easing: "easeOutQuart" }, scales: { y: { min: 0, max: 100 } } }
-        });
-
-        const memoryChart = new Chart(document.getElementById("memoryChart"), {
-            type: "doughnut",
-            data: { labels: ["已使用", "剩余"], datasets: [{ data: [0, 0], backgroundColor: ["#ff7875", "#69c0ff"] }] },
-            options: { animation: { duration: 300 } }
-        });
-
-        const netChart = new Chart(document.getElementById("netChart"), {
-            type: "line",
-            data: {
-                labels: [],
-                datasets: [
-                    { label: "发送 MB/s", data: [], borderColor: "#52c41a", tension: 0.3 },
-                    { label: "接收 MB/s", data: [], borderColor: "#1890ff", tension: 0.3 }
-                ]
-            },
-            options: { animation: { duration: 300 } }
-        });
-
-
-        function formatBytes(bytes) {
-            const units = ["B", "KB", "MB", "GB", "TB"];
-            let value = bytes;
-            let i = 0;
-            while (value >= 1024 && i < units.length - 1) {
-                value /= 1024;
-                i++;
-            }
-            return `${value.toFixed(2)} ${units[i]}`;
+      (() => {
+        try {
+          const saved = localStorage.getItem("monitor-theme");
+          const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.dataset.theme = saved || (systemDark ? "dark" : "light");
+        } catch (_) {
+          document.documentElement.dataset.theme = "light";
         }
-
-        function formatRate(bytesPerSec) {
-            return `${formatBytes(bytesPerSec)}/s`;
-        }
-
-        // 更新图表
-        async function updateCharts() {
-            const cpu = await fetch("/api/cpu").then(r => r.json());
-            const memory = await fetch("/api/memory").then(r => r.json());
-            const network = await fetch("/api/network").then(r => r.json());
-
-            // 数字显示
-            document.getElementById("cpuValue").innerText = `CPU：${cpu.cpu_percent.toFixed(1)}%`;
-            document.getElementById("memoryValue").innerText =
-                `内存：${formatBytes(memory.used_bytes)} / ${formatBytes(memory.total_bytes)}`;
-            document.getElementById("netValue").innerText =
-                `网络：上传 ${formatRate(network.upload_bytes_per_sec)} / 接收 ${formatRate(network.download_bytes_per_sec)}`;
-
-            // CPU 图
-            cpuChart.data.labels.push("");
-            cpuChart.data.datasets[0].data.push(cpu.cpu_percent);
-            if (cpuChart.data.labels.length > 30) {
-                cpuChart.data.labels.shift();
-                cpuChart.data.datasets[0].data.shift();
-            }
-            cpuChart.update();
-
-            // 内存图
-            const usedMB = memory.used_bytes / 1024 / 1024;
-            const totalMB = memory.total_bytes / 1024 / 1024;
-            memoryChart.data.datasets[0].data = [usedMB, totalMB - usedMB];
-            memoryChart.update();
-
-            // 网络图（速率）
-            const uploadMB = network.upload_bytes_per_sec / 1024 / 1024;
-            const downloadMB = network.download_bytes_per_sec / 1024 / 1024;
-
-            netChart.data.labels.push("");
-            netChart.data.datasets[0].data.push(uploadMB);
-            netChart.data.datasets[1].data.push(downloadMB);
-
-            if (netChart.data.labels.length > 30) {
-                netChart.data.labels.shift();
-                netChart.data.datasets[0].data.shift();
-                netChart.data.datasets[1].data.shift();
-            }
-            netChart.update();
-        }
-
-
-        // 进程列表
-        async function updateProcesses() {
-            const data = await fetch("/api/processes?limit=50").then(r => r.json());
-            const tbody = document.querySelector("#procTable tbody");
-            tbody.innerHTML = "";
-
-            data.forEach(p => {
-                const row = `<tr>
-                    <td>${p.pid}</td>
-                    <td>${p.name ?? ""}</td>
-                    <td>${p.cpu_percent}</td>
-                    <td>${p.memory_percent}</td>
-                </tr>`;
-                tbody.innerHTML += row;
-            });
-        }
-
-        // 搜索
-        document.getElementById("search").oninput = function() {
-            const keyword = this.value.toLowerCase();
-            document.querySelectorAll("#procTable tbody tr").forEach(row => {
-                row.style.display = row.innerText.toLowerCase().includes(keyword) ? "" : "none";
-            });
-        };
-
-        // 排序
-        function sortTable(col) {
-            const tbody = document.querySelector("#procTable tbody");
-            const rows = Array.from(tbody.querySelectorAll("tr"));
-
-            rows.sort((a, b) => {
-                const A = a.children[col].innerText;
-                const B = b.children[col].innerText;
-                return isNaN(A) ? A.localeCompare(B) : A - B;
-            });
-
-            tbody.innerHTML = "";
-            rows.forEach(r => tbody.appendChild(r));
-        }
-
-        // 定时刷新
-        setInterval(updateCharts, 2000);
-        setInterval(updateProcesses, 5000);
-
-        updateCharts();
-        updateProcesses();
+      })();
     </script>
-</body>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <header class="app-bar">
+      <div class="app-bar__inner">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">
+            <svg class="icon"><use href="/static/icons.svg#activity"></use></svg>
+          </span>
+          <div class="brand__copy">
+            <span class="brand__title">系统监控</span>
+            <span class="brand__target">
+              <span id="targetName">正在识别主机</span>
+              <span class="environment-badge" id="environmentBadge">--</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="toolbar" aria-label="监控控制">
+          <div class="connection" id="connectionIndicator" data-state="connecting" role="status" aria-live="polite">
+            <span class="connection__dot" aria-hidden="true"></span>
+            <span id="connectionText">正在连接</span>
+          </div>
+
+          <div class="update-meta">
+            <span>最后更新</span>
+            <time id="lastUpdated" datetime="">--</time>
+            <span class="failure-count" id="failureCount" hidden></span>
+          </div>
+
+          <button class="icon-button" id="refreshButton" type="button" title="立即刷新" aria-label="立即刷新">
+            <svg class="icon"><use href="/static/icons.svg#refresh"></use></svg>
+          </button>
+
+          <label class="select-control" for="refreshInterval">
+            <span class="sr-only">自动刷新频率</span>
+            <select id="refreshInterval" title="自动刷新频率">
+              <option value="2000">2 秒</option>
+              <option value="5000" selected>5 秒</option>
+              <option value="10000">10 秒</option>
+              <option value="30000">30 秒</option>
+            </select>
+          </label>
+
+          <label class="switch-control" title="自动刷新">
+            <input id="autoRefreshToggle" type="checkbox" checked>
+            <span class="switch" aria-hidden="true"></span>
+            <span id="autoRefreshStatus">自动刷新</span>
+          </label>
+
+          <button class="icon-button" id="themeButton" type="button" title="切换明暗主题" aria-label="切换到深色主题">
+            <svg class="icon"><use id="themeIcon" href="/static/icons.svg#moon"></use></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard" id="main-content">
+      <section class="metric-grid" aria-label="核心系统指标">
+        <article class="metric-card" id="healthMetric" data-tone="unknown">
+          <div class="metric-card__heading">
+            <span class="metric-card__icon" aria-hidden="true">
+              <svg class="icon"><use href="/static/icons.svg#health"></use></svg>
+            </span>
+            <span>系统健康</span>
+          </div>
+          <div class="metric-card__value"><span id="healthMetricValue">检查中</span></div>
+          <p class="metric-card__note" id="healthMetricNote">等待第一批监控数据</p>
+        </article>
+
+        <article class="metric-card" id="cpuMetric" data-tone="unknown">
+          <div class="metric-card__heading">
+            <span class="metric-card__icon" aria-hidden="true">
+              <svg class="icon"><use href="/static/icons.svg#cpu"></use></svg>
+            </span>
+            <span>CPU 使用率</span>
+          </div>
+          <div class="metric-card__value"><span id="cpuMetricValue">--</span><small>%</small></div>
+          <p class="metric-card__note" id="cpuMetricNote">等待采样</p>
+        </article>
+
+        <article class="metric-card" id="memoryMetric" data-tone="unknown">
+          <div class="metric-card__heading">
+            <span class="metric-card__icon" aria-hidden="true">
+              <svg class="icon"><use href="/static/icons.svg#memory"></use></svg>
+            </span>
+            <span>内存使用率</span>
+          </div>
+          <div class="metric-card__value"><span id="memoryMetricValue">--</span><small>%</small></div>
+          <p class="metric-card__note" id="memoryMetricNote">等待采样</p>
+        </article>
+
+        <article class="metric-card" id="diskMetric" data-tone="unknown">
+          <div class="metric-card__heading">
+            <span class="metric-card__icon" aria-hidden="true">
+              <svg class="icon"><use href="/static/icons.svg#disk"></use></svg>
+            </span>
+            <span>磁盘使用率</span>
+          </div>
+          <div class="metric-card__value"><span id="diskMetricValue">--</span><small>%</small></div>
+          <p class="metric-card__note" id="diskMetricNote">等待采样</p>
+        </article>
+
+        <article class="metric-card" id="networkMetric" data-tone="normal">
+          <div class="metric-card__heading">
+            <span class="metric-card__icon" aria-hidden="true">
+              <svg class="icon"><use href="/static/icons.svg#download"></use></svg>
+            </span>
+            <span>当前下载</span>
+          </div>
+          <div class="metric-card__value metric-card__value--compact" id="networkMetricValue">--</div>
+          <p class="metric-card__note" id="networkMetricNote">等待第二次网络采样</p>
+        </article>
+
+        <article class="metric-card" id="uptimeMetric" data-tone="normal">
+          <div class="metric-card__heading">
+            <span class="metric-card__icon" aria-hidden="true">
+              <svg class="icon"><use href="/static/icons.svg#clock"></use></svg>
+            </span>
+            <span>系统运行时间</span>
+          </div>
+          <div class="metric-card__value metric-card__value--compact" id="uptimeMetricValue">--</div>
+          <p class="metric-card__note" id="uptimeMetricNote">启动时间 --</p>
+        </article>
+      </section>
+
+      <section class="dashboard-grid" aria-label="监控详情">
+        <article class="panel panel--span-8" aria-labelledby="cpuChartTitle">
+          <header class="panel__header panel__header--responsive">
+            <div>
+              <p class="eyebrow">性能趋势</p>
+              <h2 id="cpuChartTitle">CPU 使用率</h2>
+            </div>
+            <div class="segmented-control" id="cpuRangeControl" aria-label="CPU 图表时间范围">
+              <button type="button" data-range="300000" aria-pressed="true">5 分钟</button>
+              <button type="button" data-range="900000" aria-pressed="false">15 分钟</button>
+              <button type="button" data-range="3600000" aria-pressed="false">1 小时</button>
+            </div>
+          </header>
+          <div class="chart-stats" aria-label="CPU 统计值">
+            <div><span>当前</span><strong id="cpuCurrent">--</strong></div>
+            <div><span>平均</span><strong id="cpuAverage">--</strong></div>
+            <div><span>峰值</span><strong id="cpuPeak">--</strong></div>
+            <div><span>采样</span><strong id="cpuSamples">0</strong></div>
+          </div>
+          <div class="chart-wrap" data-chart-container="cpu">
+            <canvas id="cpuChart" role="img" aria-label="CPU 使用率时间趋势图"></canvas>
+            <div class="chart-empty" id="cpuChartEmpty">正在等待 CPU 采样数据</div>
+          </div>
+          <p class="panel__footnote">虚线表示 <span id="cpuThresholdLabel">70%</span> 警告阈值；API 失败时保留最后一次有效趋势。</p>
+        </article>
+
+        <article class="panel panel--span-4" aria-labelledby="systemSummaryTitle">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">运行环境</p>
+              <h2 id="systemSummaryTitle">系统状态摘要</h2>
+            </div>
+            <svg class="panel__header-icon icon" aria-hidden="true"><use href="/static/icons.svg#server"></use></svg>
+          </header>
+          <dl class="summary-list">
+            <div><dt>主机名</dt><dd id="summaryHostname">--</dd></div>
+            <div><dt>操作系统</dt><dd id="summaryOs">--</dd></div>
+            <div><dt>内核版本</dt><dd id="summaryKernel">--</dd></div>
+            <div><dt>CPU 核心</dt><dd id="summaryCores">--</dd></div>
+            <div><dt>系统负载</dt><dd id="summaryLoad">--</dd></div>
+            <div><dt>活跃进程</dt><dd id="summaryProcesses">--</dd></div>
+            <div><dt>Python</dt><dd id="summaryPython">--</dd></div>
+            <div><dt>运行环境</dt><dd id="summaryEnvironment">--</dd></div>
+          </dl>
+        </article>
+
+        <article class="panel panel--span-4" aria-labelledby="resourceTitle">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">容量</p>
+              <h2 id="resourceTitle">内存与磁盘</h2>
+            </div>
+            <svg class="panel__header-icon icon" aria-hidden="true"><use href="/static/icons.svg#storage"></use></svg>
+          </header>
+
+          <section class="resource-section" aria-labelledby="memoryResourceTitle">
+            <div class="resource-section__heading">
+              <h3 id="memoryResourceTitle">内存</h3>
+              <strong id="memoryResourcePercent">--</strong>
+            </div>
+            <progress id="memoryProgress" max="100" value="0" aria-label="内存使用率"></progress>
+            <div class="resource-grid">
+              <div><span>已使用</span><strong id="memoryUsed">--</strong></div>
+              <div><span>可用</span><strong id="memoryAvailable">--</strong></div>
+              <div><span>总量</span><strong id="memoryTotal">--</strong></div>
+              <div><span>缓存 / 缓冲</span><strong id="memoryCache">--</strong></div>
+            </div>
+          </section>
+
+          <section class="resource-section resource-section--disks" aria-labelledby="diskResourceTitle">
+            <div class="resource-section__heading">
+              <h3 id="diskResourceTitle">磁盘</h3>
+              <span id="diskCount">--</span>
+            </div>
+            <div class="disk-list" id="diskList">
+              <div class="inline-empty">正在读取磁盘信息</div>
+            </div>
+          </section>
+        </article>
+
+        <article class="panel panel--span-8" aria-labelledby="networkChartTitle">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">I/O</p>
+              <h2 id="networkChartTitle">网络吞吐趋势</h2>
+            </div>
+            <div class="network-live" aria-label="当前网络速率">
+              <span><i class="legend-dot legend-dot--upload"></i>上传 <strong id="uploadRate">--</strong></span>
+              <span><i class="legend-dot legend-dot--download"></i>下载 <strong id="downloadRate">--</strong></span>
+            </div>
+          </header>
+          <div class="network-totals">
+            <span>累计发送 <strong id="totalSent">--</strong></span>
+            <span>累计接收 <strong id="totalReceived">--</strong></span>
+          </div>
+          <div class="chart-wrap" data-chart-container="network">
+            <canvas id="networkChart" role="img" aria-label="网络上传和下载速率时间趋势图"></canvas>
+            <div class="chart-empty" id="networkChartEmpty">正在等待网络采样数据</div>
+          </div>
+          <p class="panel__footnote">速率单位根据数值自动转换；兼容仅返回累计字节的旧接口。</p>
+        </article>
+
+        <article class="panel panel--span-12 process-panel" aria-labelledby="processTitle">
+          <header class="panel__header panel__header--responsive">
+            <div>
+              <p class="eyebrow">工作负载</p>
+              <h2 id="processTitle">进程列表</h2>
+            </div>
+            <div class="process-controls">
+              <label class="search-control" for="processSearch">
+                <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#search"></use></svg>
+                <span class="sr-only">搜索 PID 或进程名称</span>
+                <input id="processSearch" type="search" placeholder="搜索 PID 或名称" autocomplete="off">
+              </label>
+              <label class="page-size-control" for="pageSize">
+                每页
+                <select id="pageSize">
+                  <option value="10" selected>10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </label>
+            </div>
+          </header>
+
+          <div class="table-message table-message--error" id="processError" role="status" hidden></div>
+          <div class="table-scroll">
+            <table class="process-table">
+              <caption class="sr-only">当前系统进程资源使用情况</caption>
+              <thead>
+                <tr>
+                  <th scope="col" data-sort-column="pid">
+                    <button class="sort-button" type="button" data-sort="pid">PID <span aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" data-sort-column="name">
+                    <button class="sort-button" type="button" data-sort="name">名称 <span aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col">用户</th>
+                  <th scope="col">状态</th>
+                  <th scope="col" data-sort-column="cpu">
+                    <button class="sort-button" type="button" data-sort="cpu">CPU% <span aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" data-sort-column="memory">
+                    <button class="sort-button" type="button" data-sort="memory">内存% <span aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col">RSS 内存</th>
+                  <th scope="col">运行时间</th>
+                </tr>
+              </thead>
+              <tbody id="processTableBody">
+                <tr><td colspan="8"><div class="table-state">正在加载进程数据</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <footer class="table-footer">
+            <span id="processResultCount" aria-live="polite">正在获取进程</span>
+            <nav class="pagination" aria-label="进程列表分页">
+              <button class="icon-button icon-button--small" id="previousPage" type="button" title="上一页" aria-label="上一页" disabled>
+                <svg class="icon"><use href="/static/icons.svg#chevron-left"></use></svg>
+              </button>
+              <span id="pageIndicator">第 1 / 1 页</span>
+              <button class="icon-button icon-button--small" id="nextPage" type="button" title="下一页" aria-label="下一页" disabled>
+                <svg class="icon"><use href="/static/icons.svg#chevron-right"></use></svg>
+              </button>
+            </nav>
+          </footer>
+        </article>
+      </section>
+    </main>
+
+    <dialog class="process-dialog" id="processDialog" aria-labelledby="processDialogTitle">
+      <div class="process-dialog__surface">
+        <header class="process-dialog__header">
+          <div>
+            <p class="eyebrow">只读详情</p>
+            <h2 id="processDialogTitle">进程详情</h2>
+          </div>
+          <button class="icon-button" id="closeProcessDialog" type="button" title="关闭进程详情" aria-label="关闭进程详情">
+            <svg class="icon"><use href="/static/icons.svg#close"></use></svg>
+          </button>
+        </header>
+        <dl class="detail-list" id="processDetail"></dl>
+        <p class="dialog-note">此面板仅展示监控接口已经提供的信息，不包含终止进程等危险操作。</p>
+      </div>
+    </dialog>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script type="module" src="/static/js/app.js"></script>
+  </body>
 </html>
