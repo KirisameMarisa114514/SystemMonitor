@@ -41,6 +41,6 @@ def disks_info():
 
 @router.get("/processes", response_model=list[ProcessInfo])
 def processes_info(
-    limit: int = Query(default=10, ge=1, le=200),
+    limit: int = Query(default=10, ge=1, le=1000),
 ):
     return collector.get_processes(limit)
